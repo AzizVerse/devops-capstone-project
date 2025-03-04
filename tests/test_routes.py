@@ -151,8 +151,25 @@ class TestAccountService(TestCase):
         account = self._create_accounts(1)[0]  # Create an account to delete
         resp = self.client.delete(f"{BASE_URL}/{account.id}")  # Send DELETE request
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
     def test_method_not_allowed(self):
         """It should not allow an illegal method call"""
         resp = self.client.delete(BASE_URL)  # DELETE is not allowed on list endpoint
         self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_update_account(self):
+        """It should Update an existing Account"""
+        # create an Account to update
+        test_account = AccountFactory()
+        resp = self.client.post(BASE_URL, json=test_account.serialize())
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+         # update the account
+        new_account = resp.get_json()
+        new_account["name"] = "Updated Name"
+        resp = self.client.put(f"{BASE_URL}/{new_account['id']}", json=new_account)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+    
+        updated_account = resp.get_json()
+        self.assertEqual(updated_account["name"], "Updated Name")
 
