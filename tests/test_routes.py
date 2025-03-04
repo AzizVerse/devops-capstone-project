@@ -123,4 +123,9 @@ class TestAccountService(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
-    # ADD YOUR TEST CASES HERE ...
+    def test_delete_account(self):
+        """It should Delete an Account"""
+        account = self._create_accounts(1)[0]  # Create an account to delete
+        resp = self.client.delete(f"{BASE_URL}/{account.id}")  # Send DELETE request
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
