@@ -14,6 +14,7 @@ spec:
       image: alpine:3
       command: [/bin/echo]
       args: ["$(params.message)"]
+
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Task
@@ -31,22 +32,14 @@ spec:
           value: $(workspaces.source.path)
       workingDir: $(workspaces.source.path)
       securityContext:
-        runAsNonRoot: false
-        runAsUser: 0
+        runAsNonRoot: true  # Avoid root user
       script: |
         #!/usr/bin/env sh
         set -eu
         echo "Removing all files from ${WORKSPACE_SOURCE_PATH} ..."
-        # Delete any existing contents of the directory if it exists.
-        #
-        # We don't just "rm -rf ${WORKSPACE_SOURCE_PATH}" because ${WORKSPACE_SOURCE_PATH} might be "/"
-        # or the root of a mounted volume.
         if [ -d "${WORKSPACE_SOURCE_PATH}" ] ; then
-          # Delete non-hidden files and directories
           rm -rf "${WORKSPACE_SOURCE_PATH:?}"/*
-          # Delete files and directories starting with . but excluding ..
           rm -rf "${WORKSPACE_SOURCE_PATH}"/.[!.]*
-          # Delete files and directories starting with .. plus any other character
           rm -rf "${WORKSPACE_SOURCE_PATH}"/..?*
         fi
 
@@ -81,63 +74,13 @@ spec:
 
         echo "***** Installing dependencies *****"
         python -m pip install --upgrade pip wheel
-        pip install -qr requirements.txt
 
-        echo "***** Running nosetests with: $(params.args)"
-        nosetests $(params.args)
----
-apiVersion: tekton.dev/v1beta1
-kind: Pipeline
-metadata:  
-  name: cd-pipeline
-spec:
-  workspaces:
-    - name: pipeline-workspace
-  params:
-    - name: repo-url
-    - name: branch
-      default: main
-  tasks:
-    - name: init
-      workspaces:
-        - name: source
-          workspace: pipeline-workspace          
-      taskRef:
-        name: cleanup
+        if [ -f requirements.txt ]; then
+          pip install -qr requirements.txt
+        else
+          echo "❌ ERROR: requirements.txt not found!"
+          exit 1
+        fi
 
-    - name: clone
-      workspaces:
-        - name: output
-          workspace: pipeline-workspace          
-      taskRef:
-        name: git-clone
-      params:
-        - name: url
-          value: $(params.repo-url)
-        - name: revision
-          value: $(params.branch)
-      runAfter:
-        - init
-
-    - name: lint
-      workspaces:
-        - name: source
-          workspace: pipeline-workspace
-      taskRef:
-        name: flake8
-      runAfter:
-        - clone
-
-    - name: tests
-      workspaces:
-        - name: source
-          workspace: pipeline-workspace
-      taskRef:
-        name: nose
-      params:
-        - name: database_uri
-          value: "sqlite:///test.db"
-        - name: args
-          value: "-v --with-spec --spec-color"
-      runAfter:
-        - clone
+        echo "***** Running nosetests with: $(params.args) *****"
+        nosetests $(params.args) || { echo "❌ Tests failed!"; exit 1; }
